@@ -10,10 +10,10 @@ const TMDB_API_BASE = 'https://api.themoviedb.org/3';
 
 // Manifest dell'addon
 const manifest = {
-    id: 'community.videasy.player',
-    version: '2.0.1', // Ho incrementato la versione
-    name: 'Videasy Player',
-    description: 'Addon Stremio che usa il player Videasy (apre nel browser)',
+    id: 'community.videasy.player.ita',
+    version: '2.0.2',
+    name: 'Videasy ITA',
+    description: 'Videasy Player ottimizzato per contenuti in Italiano',
     resources: ['stream'],
     types: ['movie', 'series', 'anime'],
     catalogs: [], 
@@ -29,7 +29,6 @@ const builder = new addonBuilder(manifest);
 // Helper function per convertire IMDB ID in TMDB ID
 async function imdbToTmdb(imdbId, type) {
     if (!TMDB_API_KEY) {
-        // Fallback se manca la chiave API
         console.warn('⚠️ TMDB_API_KEY mancante! Potrebbe non trovare il video corretto.');
         return imdbId.replace('tt', '');
     }
@@ -72,8 +71,11 @@ function generateVideasyUrl(tmdbId, type, season = null, episode = null, options
         }
     }
     
-    // Aggiungi parametri opzionali
+    // Parametri URL
     const params = new URLSearchParams();
+    
+    // Tenta di forzare la lingua italiana
+    params.append('lang', 'it'); 
     
     if (options.color) params.append('color', options.color);
     if (options.autoplayNextEpisode) params.append('autoplayNextEpisode', 'true');
@@ -110,14 +112,12 @@ builder.defineStreamHandler(async ({ type, id }) => {
         const tmdbId = await imdbToTmdb(imdbId, type);
         
         if (!tmdbId) {
-            console.log(`❌ Impossibile trovare TMDB ID per ${imdbId}`);
             return { streams: [] };
         }
 
-        console.log(`✅ TMDB ID trovato: ${tmdbId} per IMDB ID: ${imdbId}`);
-
         const streams = [];
         
+        // Opzioni grafiche
         const playerOptions = {
             color: '8B5CF6',
             overlay: true
@@ -127,15 +127,13 @@ builder.defineStreamHandler(async ({ type, id }) => {
             const movieUrl = generateVideasyUrl(tmdbId, 'movie', null, null, playerOptions);
             
             streams.push({
-                name: '🎬 Videasy',
-                title: 'Apri nel Browser\n🎨 HD Quality',
-                externalUrl: movieUrl // <--- MODIFICA IMPORTANTE: externalUrl
+                name: '🇮🇹 Videasy ITA',
+                title: 'Riproduci nel Browser (HD)',
+                externalUrl: movieUrl
             });
             
         } else if (type === 'series') {
-            if (!season || !episode) {
-                return { streams: [] };
-            }
+            if (!season || !episode) return { streams: [] };
             
             const seriesOptions = {
                 ...playerOptions,
@@ -148,24 +146,9 @@ builder.defineStreamHandler(async ({ type, id }) => {
             
             if (seriesUrl) {
                 streams.push({
-                    name: '📺 Videasy',
-                    title: `Apri nel Browser\n📺 S${season}E${episode}`,
-                    externalUrl: seriesUrl // <--- MODIFICA IMPORTANTE: externalUrl
-                });
-            }
-        }
-
-        // Backup stream
-        if (streams.length > 0) {
-            const basicUrl = type === 'movie' 
-                ? generateVideasyUrl(tmdbId, 'movie')
-                : generateVideasyUrl(tmdbId, 'series', season, episode, { nextEpisode: true });
-            
-            if (basicUrl) {
-                streams.push({
-                    name: '🎬 Videasy Basic',
-                    title: 'Apri nel Browser (Basic)',
-                    externalUrl: basicUrl // <--- MODIFICA IMPORTANTE: externalUrl
+                    name: '🇮🇹 Videasy ITA',
+                    title: `S${season}E${episode} - Riproduci nel Browser`,
+                    externalUrl: seriesUrl
                 });
             }
         }
@@ -173,7 +156,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
         return { streams };
         
     } catch (error) {
-        console.error('❌ Errore nello stream handler:', error);
+        console.error('❌ Errore handler:', error);
         return { streams: [] };
     }
 });
@@ -181,4 +164,4 @@ builder.defineStreamHandler(async ({ type, id }) => {
 const PORT = process.env.PORT || 7000;
 serveHTTP(builder.getInterface(), { port: PORT });
 
-console.log(`🚀 Addon Videasy avviato su http://localhost:${PORT}`);
+console.log(`🚀 Addon Videasy ITA avviato su http://localhost:${PORT}`);
