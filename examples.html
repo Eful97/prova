@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Videasy Player - Esempi</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        h1 {
+            color: #8B5CF6;
+        }
+        .player-container {
+            margin: 30px 0;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .player-container h3 {
+            margin-top: 0;
+            color: #8B5CF6;
+        }
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            background: #000;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #333;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+        }
+        .info code {
+            color: #8B5CF6;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎬 Videasy Player - Esempi di Integrazione</h1>
+    <p>Questi esempi mostrano come funziona il player Videasy per film, serie TV e anime.</p>
+
+    <!-- FILM -->
+    <div class="player-container">
+        <h3>🎬 Film: Avengers Endgame</h3>
+        <div class="video-wrapper">
+            <iframe 
+                src="https://player.videasy.net/movie/299534?color=8B5CF6&overlay=true"
+                allowfullscreen
+                allow="encrypted-media">
+            </iframe>
+        </div>
+        <div class="info">
+            <strong>URL:</strong><br>
+            <code>https://player.videasy.net/movie/299534?color=8B5CF6&overlay=true</code><br><br>
+            <strong>Parametri:</strong><br>
+            - TMDB ID: 299534<br>
+            - Colore: 8B5CF6 (viola)<br>
+            - Overlay: attivo
+        </div>
+    </div>
+
+    <!-- SERIE TV -->
+    <div class="player-container">
+        <h3>📺 Serie TV: Game of Thrones S01E01</h3>
+        <div class="video-wrapper">
+            <iframe 
+                src="https://player.videasy.net/tv/1399/1/1?color=8B5CF6&nextEpisode=true&autoplayNextEpisode=true&episodeSelector=true&overlay=true"
+                allowfullscreen
+                allow="encrypted-media">
+            </iframe>
+        </div>
+        <div class="info">
+            <strong>URL:</strong><br>
+            <code>https://player.videasy.net/tv/1399/1/1?nextEpisode=true&autoplayNextEpisode=true&episodeSelector=true</code><br><br>
+            <strong>Parametri:</strong><br>
+            - TMDB ID: 1399<br>
+            - Stagione: 1<br>
+            - Episodio: 1<br>
+            - Pulsante Next Episode: attivo<br>
+            - Autoplay Next: attivo<br>
+            - Selettore Episodi: attivo<br>
+            - Overlay: attivo
+        </div>
+    </div>
+
+    <!-- ANIME -->
+    <div class="player-container">
+        <h3>🎌 Anime: One Piece Episodio 1</h3>
+        <div class="video-wrapper">
+            <iframe 
+                src="https://player.videasy.net/anime/21/1?color=8B5CF6"
+                allowfullscreen
+                allow="encrypted-media">
+            </iframe>
+        </div>
+        <div class="info">
+            <strong>URL:</strong><br>
+            <code>https://player.videasy.net/anime/21/1?color=8B5CF6</code><br><br>
+            <strong>Parametri:</strong><br>
+            - Anilist ID: 21<br>
+            - Episodio: 1<br>
+            - Versione: Sub (default)<br>
+            - Colore: 8B5CF6 (viola)
+        </div>
+    </div>
+
+    <div class="player-container">
+        <h3>📝 Come funziona l'addon Stremio</h3>
+        <div class="info">
+            <strong>1. Ricezione richiesta</strong><br>
+            Stremio invia: <code>{ type: "movie", id: "tt4154796" }</code><br><br>
+            
+            <strong>2. Conversione IMDB → TMDB</strong><br>
+            L'addon converte <code>tt4154796</code> → <code>299534</code> usando TMDB API<br><br>
+            
+            <strong>3. Generazione URL Videasy</strong><br>
+            Crea: <code>https://player.videasy.net/movie/299534?color=8B5CF6&overlay=true</code><br><br>
+            
+            <strong>4. Ritorno a Stremio</strong><br>
+            Stremio riceve l'URL e mostra il player Videasy integrato<br><br>
+            
+            <strong>Vantaggi:</strong><br>
+            ✅ Nessuna API key Videasy necessaria<br>
+            ✅ Stream diretti e veloci<br>
+            ✅ Player professionale con controlli avanzati<br>
+            ✅ Supporto completo per film, serie e anime<br>
+            ✅ Autoplay e navigazione episodi integrati
+        </div>
+    </div>
+
+    <div class="player-container">
+        <h3>🎨 Personalizzazioni Disponibili</h3>
+        <div class="info">
+            <strong>Parametri URL supportati:</strong><br><br>
+            
+            <code>?color=HEXCODE</code> - Colore tema (senza #)<br>
+            Esempi: 8B5CF6 (viola), 3B82F6 (blu), EF4444 (rosso)<br><br>
+            
+            <code>&overlay=true</code> - Overlay Netflix-style<br>
+            Mostra info quando in pausa senza interazione per 5 secondi<br><br>
+            
+            <code>&progress=120</code> - Tempo di inizio in secondi<br>
+            Esempio: 120 = inizia a 2 minuti<br><br>
+            
+            <code>&nextEpisode=true</code> - Pulsante episodio successivo<br>
+            Solo per serie TV<br><br>
+            
+            <code>&episodeSelector=true</code> - Selettore episodi integrato<br>
+            Dropdown stagioni/episodi nel player<br><br>
+            
+            <code>&autoplayNextEpisode=true</code> - Autoplay automatico<br>
+            Riproduce automaticamente il prossimo episodio<br><br>
+            
+            <code>&dub=true</code> - Versione doppiata (solo anime)<br>
+            Default: sub (sottotitolato)
+        </div>
+    </div>
+</body>
+</html>

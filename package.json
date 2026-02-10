@@ -1,0 +1,28 @@
+{
+  "name": "stremio-videasy-addon",
+  "version": "1.0.0",
+  "description": "Stremio addon che utilizza l'API Videasy per fornire stream di film e serie TV",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "stremio",
+    "addon",
+    "videasy",
+    "streaming"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
