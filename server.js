@@ -4,19 +4,19 @@ const fetch = require('node-fetch');
 // Configurazione Videasy Player
 const VIDEASY_PLAYER_BASE = 'https://player.videasy.net';
 
-// Configurazione TMDB per i cataloghi (opzionale, ma consigliato)
+// Configurazione TMDB
 const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 const TMDB_API_BASE = 'https://api.themoviedb.org/3';
 
 // Manifest dell'addon
 const manifest = {
     id: 'community.videasy.player',
-    version: '2.0.0',
+    version: '2.0.1', // Ho incrementato la versione
     name: 'Videasy Player',
-    description: 'Addon Stremio che usa il player Videasy per streaming di film, serie TV e anime',
+    description: 'Addon Stremio che usa il player Videasy (apre nel browser)',
     resources: ['stream'],
     types: ['movie', 'series', 'anime'],
-    catalogs: [],  // Array vuoto richiesto da Stremio
+    catalogs: [], 
     idPrefixes: ['tt'],
     behaviorHints: {
         configurable: false,
@@ -29,7 +29,8 @@ const builder = new addonBuilder(manifest);
 // Helper function per convertire IMDB ID in TMDB ID
 async function imdbToTmdb(imdbId, type) {
     if (!TMDB_API_KEY) {
-        // Se non c'è API key, prova a estrarre solo i numeri dall'IMDB ID
+        // Fallback se manca la chiave API
+        console.warn('⚠️ TMDB_API_KEY mancante! Potrebbe non trovare il video corretto.');
         return imdbId.replace('tt', '');
     }
     
@@ -88,7 +89,7 @@ function generateVideasyUrl(tmdbId, type, season = null, episode = null, options
     return url;
 }
 
-// STREAM Handler - Il cuore dell'addon
+// STREAM Handler
 builder.defineStreamHandler(async ({ type, id }) => {
     console.log(`🎬 Stream richiesto: type=${type}, id=${id}`);
     
@@ -97,7 +98,6 @@ builder.defineStreamHandler(async ({ type, id }) => {
         let season = null;
         let episode = null;
 
-        // Parse ID per serie TV (formato: imdbId:season:episode)
         if (id.includes(':')) {
             const parts = id.split(':');
             imdbId = parts[0];
@@ -107,7 +107,6 @@ builder.defineStreamHandler(async ({ type, id }) => {
             }
         }
 
-        // Converti IMDB ID in TMDB ID
         const tmdbId = await imdbToTmdb(imdbId, type);
         
         if (!tmdbId) {
@@ -119,32 +118,25 @@ builder.defineStreamHandler(async ({ type, id }) => {
 
         const streams = [];
         
-        // Configurazione player predefinita
         const playerOptions = {
-            color: '8B5CF6', // Viola
+            color: '8B5CF6',
             overlay: true
         };
 
         if (type === 'movie') {
-            // URL per film
             const movieUrl = generateVideasyUrl(tmdbId, 'movie', null, null, playerOptions);
             
             streams.push({
                 name: '🎬 Videasy',
-                title: 'Videasy Player\n🎨 HD Quality',
-                url: movieUrl,
-                behaviorHints: {
-                    bingeGroup: 'videasy-' + tmdbId
-                }
+                title: 'Apri nel Browser\n🎨 HD Quality',
+                externalUrl: movieUrl // <--- MODIFICA IMPORTANTE: externalUrl
             });
             
         } else if (type === 'series') {
             if (!season || !episode) {
-                console.log(`❌ Mancano stagione/episodio per la serie`);
                 return { streams: [] };
             }
             
-            // URL per serie TV con features extra
             const seriesOptions = {
                 ...playerOptions,
                 nextEpisode: true,
@@ -157,16 +149,13 @@ builder.defineStreamHandler(async ({ type, id }) => {
             if (seriesUrl) {
                 streams.push({
                     name: '📺 Videasy',
-                    title: `Videasy Player\n📺 S${season}E${episode} - HD Quality\n⏭️ Autoplay Next Episode`,
-                    url: seriesUrl,
-                    behaviorHints: {
-                        bingeGroup: 'videasy-' + tmdbId
-                    }
+                    title: `Apri nel Browser\n📺 S${season}E${episode}`,
+                    externalUrl: seriesUrl // <--- MODIFICA IMPORTANTE: externalUrl
                 });
             }
         }
 
-        // Aggiungi stream di backup senza personalizzazioni
+        // Backup stream
         if (streams.length > 0) {
             const basicUrl = type === 'movie' 
                 ? generateVideasyUrl(tmdbId, 'movie')
@@ -175,16 +164,12 @@ builder.defineStreamHandler(async ({ type, id }) => {
             if (basicUrl) {
                 streams.push({
                     name: '🎬 Videasy Basic',
-                    title: 'Videasy Player (Basic)\n🎬 Standard Quality',
-                    url: basicUrl,
-                    behaviorHints: {
-                        bingeGroup: 'videasy-' + tmdbId
-                    }
+                    title: 'Apri nel Browser (Basic)',
+                    externalUrl: basicUrl // <--- MODIFICA IMPORTANTE: externalUrl
                 });
             }
         }
 
-        console.log(`✅ ${streams.length} stream generati`);
         return { streams };
         
     } catch (error) {
@@ -193,10 +178,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
     }
 });
 
-// Avvio del server
 const PORT = process.env.PORT || 7000;
 serveHTTP(builder.getInterface(), { port: PORT });
 
 console.log(`🚀 Addon Videasy avviato su http://localhost:${PORT}`);
-console.log(`📦 Manifest disponibile su http://localhost:${PORT}/manifest.json`);
-console.log(`🔗 Installa l'addon su: http://localhost:${PORT}/configure`);
