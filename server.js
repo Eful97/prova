@@ -1,20 +1,23 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const fetch = require('node-fetch');
 
-// --- COSTANTI E CONFIGURAZIONE SCRAPER ---
+// --- CONFIGURAZIONE ---
+const PORT = process.env.PORT || 7000;
+const VIDEASY_API_DEC = 'https://enc-dec.app/api';
+// Chiave pubblica di fallback se la tua ENV non è settata
+const TMDB_API_KEY = process.env.TMDB_API_KEY || 'd131017ccc6e5462a81c9304d21476de'; 
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
+// HEADERS FONDAMENTALI per evitare blocchi (403 Forbidden)
 const HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://videasy.net/',
+    'Origin': 'https://videasy.net',
+    'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
     'Connection': 'keep-alive'
 };
 
-const VIDEASY_API = 'https://enc-dec.app/api';
-// Nota: La chiave API TMDB qui sotto è quella pubblica dello script originale. 
-// Puoi rimettere la tua (process.env.TMDB_API_KEY) se preferisci, ma questa funziona per lo scraper.
-const TMDB_API_KEY_SCRAPER = 'd131017ccc6e5462a81c9304d21476de'; 
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-
-// Configurazione Server Videasy
+// Lista Server
 const SERVERS = {
     'Harbor': { url: 'https://api.videasy.net/meine/sources-with-title', language: 'Italian', params: { language: 'italian' } },
     'Neon': { url: 'https://api.videasy.net/myflixerzupcloud/sources-with-title', language: 'Original' },
@@ -22,277 +25,212 @@ const SERVERS = {
     'Cypher': { url: 'https://api.videasy.net/moviebox/sources-with-title', language: 'Original' },
     'Yoru': { url: 'https://api.videasy.net/cdn/sources-with-title', language: 'Original', moviesOnly: true },
     'Reyna': { url: 'https://api2.videasy.net/primewire/sources-with-title', language: 'Original' },
-    'Omen': { url: 'https://api.videasy.net/onionplay/sources-with-title', language: 'Original' },
-    'Breach': { url: 'https://api.videasy.net/m4uhd/sources-with-title', language: 'Original' },
     'Vyse': { url: 'https://api.videasy.net/hdmovie/sources-with-title', language: 'Original' },
-    'Killjoy': { url: 'https://api.videasy.net/meine/sources-with-title', language: 'German', params: { language: 'german' } },
-    'Chamber': { url: 'https://api.videasy.net/meine/sources-with-title', language: 'French', params: { language: 'french' }, moviesOnly: true },
-    'Fade': { url: 'https://api.videasy.net/hdmovie/sources-with-title', language: 'Hindi' },
-    'Gekko': { url: 'https://api2.videasy.net/cuevana-latino/sources-with-title', language: 'Latin' },
-    'Kayo': { url: 'https://api2.videasy.net/cuevana-spanish/sources-with-title', language: 'Spanish' },
-    'Raze': { url: 'https://api.videasy.net/superflix/sources-with-title', language: 'Portuguese' },
-    'Phoenix': { url: 'https://api2.videasy.net/overflix/sources-with-title', language: 'Portuguese' },
-    'Astra': { url: 'https://api.videasy.net/visioncine/sources-with-title', language: 'Portuguese' }
+    'Killjoy': { url: 'https://api.videasy.net/meine/sources-with-title', language: 'German', params: { language: 'german' } }
 };
 
-// --- HELPER FUNCTIONS DELLO SCRAPER (Adattate per Node.js) ---
+// --- HELPER FUNCTIONS ---
 
-async function requestRaw(method, urlString, options) {
-    const response = await fetch(urlString, {
+async function requestRaw(method, urlString, options = {}) {
+    const opts = {
         method: method,
-        headers: (options && options.headers) || {},
-        body: (options && options.body) || undefined
-    });
+        headers: { ...HEADERS, ...(options.headers || {}) },
+        body: options.body
+    };
+    
+    // console.log(`📡 Richiesta ${method}: ${urlString}`); // Decommenta per debug estremo
+    
+    const response = await fetch(urlString, opts);
     const body = await response.text();
-    if (response.ok) {
-        return { status: response.status, headers: response.headers, body: body };
-    } else {
-        throw new Error(`HTTP ${response.status}: ${body}`);
+    
+    if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status} su ${urlString}`);
     }
-}
-
-async function getText(url) {
-    const res = await requestRaw('GET', url, { headers: HEADERS });
-    return res.body;
+    return { status: response.status, body };
 }
 
 async function getJson(url) {
-    const res = await requestRaw('GET', url, { headers: HEADERS });
-    try { return JSON.parse(res.body); } 
-    catch (e) { throw new Error(`Invalid JSON from GET ${url}: ${e.message}`); }
-}
-
-async function postJson(url, jsonBody, extraHeaders) {
-    const body = JSON.stringify(jsonBody);
-    const headers = Object.assign({}, HEADERS, { 'Content-Type': 'application/json' }, extraHeaders || {});
-    const res = await requestRaw('POST', url, { headers, body });
-    try { return JSON.parse(res.body); } 
-    catch (e) { throw new Error(`Invalid JSON from POST ${url}: ${e.message}`); }
-}
-
-async function decryptVideoEasy(encryptedText, tmdbId) {
-    // Chiama l'API esterna per decriptare
-    const response = await postJson(`${VIDEASY_API}/dec-videasy`, { text: encryptedText, id: tmdbId });
-    return response.result;
-}
-
-// Funzioni per ottenere dettagli TMDB (Necessarie per lo scraper)
-async function fetchMediaDetails(tmdbId, mediaType) {
-    // Nota: usiamo la chiave dello scraper qui perché le funzioni interne la richiedono
-    const url = `${TMDB_BASE_URL}/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY_SCRAPER}&append_to_response=external_ids`;
-    const data = await getJson(url);
-    
-    // Normalizza output per movie e tv
-    return {
-        id: data.id,
-        title: data.title || data.name,
-        year: (data.release_date || data.first_air_date || '').split('-')[0],
-        imdbId: data.external_ids?.imdb_id || '',
-        mediaType: mediaType,
-        numberOfSeasons: data.number_of_seasons,
-        numberOfEpisodes: data.number_of_episodes
-    };
-}
-
-function buildVideoEasyUrl(serverConfig, mediaType, title, year, tmdbId, imdbId, seasonId = null, episodeId = null) {
-    const params = {
-        title: title,
-        mediaType: mediaType,
-        year: year,
-        tmdbId: tmdbId,
-        imdbId: imdbId
-    };
-
-    if (serverConfig.params) Object.assign(params, serverConfig.params);
-    if (mediaType === 'tv' && seasonId && episodeId) {
-        params.seasonId = seasonId;
-        params.episodeId = episodeId;
+    try {
+        const res = await requestRaw('GET', url);
+        return JSON.parse(res.body);
+    } catch (e) {
+        console.error(`❌ Errore JSON ${url}:`, e.message);
+        return null;
     }
-
-    const queryString = Object.keys(params)
-        .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(params[key]))
-        .join('&');
-
-    return `${serverConfig.url}?${queryString}`;
 }
 
-function extractQualityFromUrl(url) {
-    if (url.includes('1080') || url.includes('1920')) return '1080p';
-    if (url.includes('720') || url.includes('1280')) return '720p';
-    if (url.includes('480')) return '480p';
-    if (url.includes('360')) return '360p';
-    return 'Unknown';
-}
-
-function formatStreams(mediaData, serverName, serverConfig) {
-    if (!mediaData || !mediaData.sources) return [];
-    
-    const streams = [];
-    mediaData.sources.forEach(source => {
-        if (!source.url) return;
-        
-        let quality = source.quality || extractQualityFromUrl(source.url);
-        if (quality === 'auto' || quality === 'adaptive') quality = 'Adaptive';
-        
-        // Determina se è italiano
-        const isItalian = serverConfig.language === 'Italian' || (source.language && source.language.toLowerCase().includes('ita'));
-
-        streams.push({
-            url: source.url,
-            quality: quality,
-            server: serverName,
-            language: serverConfig.language,
-            isItalian: isItalian,
-            type: source.url.includes('.m3u8') ? 'hls' : 'mp4'
+async function postJson(url, jsonBody) {
+    try {
+        const res = await requestRaw('POST', url, {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(jsonBody)
         });
-    });
-    return streams;
+        return JSON.parse(res.body);
+    } catch (e) {
+        console.error(`❌ Errore POST ${url}:`, e.message);
+        return null;
+    }
 }
 
-async function fetchFromServer(serverName, serverConfig, mediaType, title, year, tmdbId, imdbId, seasonId, episodeId) {
-    if (mediaType === 'tv' && serverConfig.moviesOnly) return [];
+// 1. Decriptazione tramite API esterna
+async function decryptVideoEasy(encryptedText, tmdbId) {
+    if (!encryptedText || encryptedText.length < 10) return null;
+    
+    const data = await postJson(`${VIDEASY_API_DEC}/dec-videasy`, { 
+        text: encryptedText, 
+        id: tmdbId 
+    });
+    
+    return data ? data.result : null;
+}
+
+// 2. Costruzione URL Videasy
+function buildUrl(serverConfig, mediaType, title, year, tmdbId, imdbId, season = null, episode = null) {
+    const params = new URLSearchParams({
+        title, mediaType, year, tmdbId, imdbId
+    });
+    
+    if (serverConfig.params) {
+        Object.keys(serverConfig.params).forEach(k => params.append(k, serverConfig.params[k]));
+    }
+    
+    if (mediaType === 'tv' && season && episode) {
+        params.append('seasonId', season);
+        params.append('episodeId', episode);
+    }
+    
+    return `${serverConfig.url}?${params.toString()}`;
+}
+
+// 3. Estrazione Stream dal singolo server
+async function fetchFromServer(serverName, config, mediaInfo) {
+    const { mediaType, title, year, tmdbId, imdbId, season, episode } = mediaInfo;
+    
+    if (mediaType === 'tv' && config.moviesOnly) return [];
 
     try {
-        const url = buildVideoEasyUrl(serverConfig, mediaType, title, year, tmdbId, imdbId, seasonId, episodeId);
-        const encryptedData = await getText(url);
-        if (!encryptedData || encryptedData.trim() === '') return [];
+        const url = buildUrl(config, mediaType, title, year, tmdbId, imdbId, season, episode);
         
-        const decryptedData = await decryptVideoEasy(encryptedData, tmdbId);
-        return formatStreams(decryptedData, serverName, serverConfig);
-    } catch (error) {
-        // console.log(`Errore ${serverName}: ${error.message}`); // Decommenta per debug
+        // Scarica i dati criptati
+        const res = await requestRaw('GET', url);
+        if (!res.body || res.body.trim().length === 0) return [];
+
+        // Decripta
+        const decrypted = await decryptVideoEasy(res.body, tmdbId);
+        if (!decrypted || !decrypted.sources) return [];
+
+        // Formatta
+        return decrypted.sources.map(source => ({
+            url: source.url,
+            quality: source.quality || 'Auto',
+            server: serverName,
+            isItalian: config.language === 'Italian',
+            language: config.language
+        })).filter(s => s.url); // Rimuovi URL vuoti
+
+    } catch (e) {
+        // console.log(`⚠️ ${serverName} fallito: ${e.message}`); // Normale che alcuni falliscano
         return [];
     }
 }
 
-// --- LOGICA PRINCIPALE ADDON ---
-
-const manifest = {
-    id: 'community.videasy.advanced',
-    version: '3.0.0', // Versione Major per il cambio logica
-    name: 'Videasy Advanced',
-    description: 'Videasy Scraper con supporto Multi-Server e Decrypt automatico. Priorità ITA.',
+// --- ADDON MANIFEST ---
+const builder = new addonBuilder({
+    id: 'community.videasy.debug',
+    version: '3.1.0',
+    name: 'Videasy ITA (Fix)',
+    description: 'Videasy con log migliorati e fallback web',
     resources: ['stream'],
-    types: ['movie', 'series', 'anime'],
+    types: ['movie', 'series'],
     catalogs: [], 
-    idPrefixes: ['tt'],
-    behaviorHints: { configurable: false }
-};
+    idPrefixes: ['tt']
+});
 
-const builder = new addonBuilder(manifest);
-
-// Helper per convertire l'input Stremio (IMDB) in TMDB ID
-// (Serve perché l'input dell'addon è tt123, ma lo scraper vuole ID numerici TMDB)
-async function getTmdbIdFromImdb(imdbId) {
-    const apiKey = process.env.TMDB_API_KEY || TMDB_API_KEY_SCRAPER;
-    try {
-        const url = `${TMDB_BASE_URL}/find/${imdbId}?api_key=${apiKey}&external_source=imdb_id`;
-        const data = await getJson(url);
-        if (data.movie_results?.[0]) return { id: data.movie_results[0].id.toString(), type: 'movie' };
-        if (data.tv_results?.[0]) return { id: data.tv_results[0].id.toString(), type: 'tv' };
-        return null;
-    } catch (e) { return null; }
-}
-
+// --- STREAM HANDLER ---
 builder.defineStreamHandler(async ({ type, id }) => {
-    console.log(`🎬 Richiesta Stream: ${type} ${id}`);
+    console.log(`\n🎬 NUOVA RICHIESTA: ${type} ${id}`);
     
     let imdbId = id;
     let season = null;
     let episode = null;
 
     if (id.includes(':')) {
-        const parts = id.split(':');
-        imdbId = parts[0];
-        season = parts[1];
-        episode = parts[2];
+        [imdbId, season, episode] = id.split(':');
     }
 
-    // 1. Converti IMDB -> TMDB
-    const tmdbData = await getTmdbIdFromImdb(imdbId);
-    if (!tmdbData) {
-        console.log('❌ TMDB ID non trovato');
+    // A. Converti IMDB -> TMDB
+    const findUrl = `${TMDB_BASE_URL}/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`;
+    const tmdbData = await getJson(findUrl);
+    
+    let tmdbId = null;
+    let mediaType = type === 'series' ? 'tv' : 'movie';
+    let title = '';
+    let year = '';
+
+    if (tmdbData) {
+        const result = (tmdbData.movie_results?.[0]) || (tmdbData.tv_results?.[0]);
+        if (result) {
+            tmdbId = result.id.toString();
+            title = result.title || result.name;
+            year = (result.release_date || result.first_air_date || '').split('-')[0];
+            // Forza il tipo corretto in base al risultato TMDB
+            mediaType = tmdbData.movie_results?.length > 0 ? 'movie' : 'tv';
+        }
+    }
+
+    if (!tmdbId) {
+        console.log('❌ TMDB ID non trovato. Interrompo.');
         return { streams: [] };
     }
-    const tmdbId = tmdbData.id;
-    // Sovrascrivi il tipo se necessario (es. Stremio dice 'series' ma TMDB dice 'tv')
-    const mediaType = type === 'series' || type === 'anime' ? 'tv' : 'movie';
 
-    console.log(`🔍 Scraping per TMDB: ${tmdbId} (${mediaType}) S:${season} E:${episode}`);
+    console.log(`✅ Info trovate: ${title} (${year}) [ID: ${tmdbId}]`);
 
-    // 2. Ottieni Dettagli Media (Titolo, Anno)
-    const details = await fetchMediaDetails(tmdbId, mediaType);
-
-    // 3. Esegui scraping parallelo su tutti i server
-    const promises = Object.keys(SERVERS).map(serverName => 
-        fetchFromServer(serverName, SERVERS[serverName], mediaType, details.title, details.year, tmdbId, imdbId, season, episode)
-    );
-
-    const results = await Promise.all(promises);
+    // B. Esegui Scraping
+    const mediaInfo = { mediaType, title, year, tmdbId, imdbId, season, episode };
     
-    // Appiattisci l'array di risultati
-    let allStreams = results.flat();
+    // Cerca su Harbor (ITA) per primo
+    const tasks = Object.keys(SERVERS).map(name => fetchFromServer(name, SERVERS[name], mediaInfo));
+    const results = await Promise.all(tasks);
+    const allStreams = results.flat();
 
-    // 4. Rimuovi duplicati (basati su URL)
-    const uniqueStreams = [];
-    const seenUrls = new Set();
-    allStreams.forEach(s => {
-        if (!seenUrls.has(s.url)) {
-            seenUrls.add(s.url);
-            uniqueStreams.push(s);
-        }
-    });
+    // C. Crea array per Stremio
+    let stremioStreams = [];
 
-    // 5. Ordinamento Intelligente
-    // Priorità: 1. Lingua Italiana (Harbor/ITA) 2. Risoluzione Alta 3. Resto
-    uniqueStreams.sort((a, b) => {
-        // Se uno è italiano e l'altro no, vince l'italiano
-        if (a.isItalian && !b.isItalian) return -1;
-        if (!a.isItalian && b.isItalian) return 1;
-
-        // Se entrambi ITA o entrambi stranieri, ordina per qualità
-        const getVal = (q) => {
-            if (q.includes('4k')) return 2160;
-            if (q.includes('1080')) return 1080;
-            if (q.includes('720')) return 720;
-            if (q.includes('480')) return 480;
-            return 0;
-        };
-        return getVal(b.quality) - getVal(a.quality);
-    });
-
-    console.log(`✅ Trovati ${uniqueStreams.length} stream totali.`);
-
-    // 6. Mappa per Stremio
-    const stremioStreams = uniqueStreams.map(s => {
-        const flag = s.isItalian ? '🇮🇹' : (s.language === 'Original' ? '🇺🇸' : '🌐');
-        const serverName = s.server === 'Harbor' ? 'ITA' : s.server;
+    // Se abbiamo trovato link diretti
+    if (allStreams.length > 0) {
+        console.log(`🎉 Trovati ${allStreams.length} stream diretti!`);
         
-        return {
-            name: `${flag} ${serverName}`,
-            title: `${s.quality} - ${s.language}\nServer: ${s.server}`,
-            url: s.url,
-            behaviorHints: {
-                bingeGroup: `videasy-${s.server}-${s.quality}`,
-                notWebReady: false
-            }
-        };
-    });
-
-    // Aggiungi un fallback al browser se tutto fallisce (opzionale)
-    /*
-    if (stremioStreams.length === 0) {
-        stremioStreams.push({
-            name: '🌐 Web',
-            title: 'Nessun flusso diretto trovato. Apri nel browser',
-            externalUrl: `https://player.videasy.net/${mediaType === 'movie' ? 'movie' : 'tv'}/${tmdbId}`
+        // Ordina: ITA prima, poi qualità
+        allStreams.sort((a, b) => {
+            if (a.isItalian && !b.isItalian) return -1;
+            if (!a.isItalian && b.isItalian) return 1;
+            return 0; 
         });
+
+        stremioStreams = allStreams.map(s => ({
+            name: `${s.isItalian ? '🇮🇹' : '🌍'} ${s.server}`,
+            title: `${s.quality} - Direct Play`,
+            url: s.url,
+            behaviorHints: { bingeGroup: `videasy-${s.server}` }
+        }));
+    } else {
+        console.log('⚠️ Nessuno stream diretto trovato. Attivo fallback Web.');
     }
-    */
+
+    // D. AGGIUNGI SEMPRE IL FALLBACK WEB (Salvavita)
+    // Se lo scraper fallisce, almeno l'utente può aprire il browser
+    let webUrl = 'https://player.videasy.net';
+    if (mediaType === 'movie') webUrl += `/movie/${tmdbId}?lang=it`;
+    else webUrl += `/tv/${tmdbId}/${season}/${episode}?lang=it`;
+
+    stremioStreams.push({
+        name: '🌐 Videasy Web',
+        title: 'Clicca qui se gli altri non vanno (Apri Browser)',
+        externalUrl: webUrl
+    });
 
     return { streams: stremioStreams };
 });
 
-const PORT = process.env.PORT || 7000;
 serveHTTP(builder.getInterface(), { port: PORT });
-console.log(`🚀 Addon Videasy Advanced avviato su http://localhost:${PORT}`);
+console.log(`🚀 Addon Fix avviato su http://localhost:${PORT}`);
